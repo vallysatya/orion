@@ -216,3 +216,33 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+# =====================================================
+# Orcas Project Specific
+# =====================================================
+
+# Cursor
+.cursor/
+
+# Logs
+logs/
+*.log
+
+# Local databases
+*.db
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# AI experiment outputs
+artifacts/
+outputs/
+checkpoints/
+
+# Local environment files
+.env.local
+.env.development
+.env.production
+
+# Personal dev journal (local only — not pushed to GitHub)
+docs/journal/
