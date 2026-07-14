@@ -16,31 +16,42 @@ async def _ask(runner: AgentRunner, message: str) -> None:
         print("(no final response text)")
 
 
+async def _read_line(prompt: str) -> str:
+    """Read user input without blocking the event loop."""
+    return (await asyncio.to_thread(input, prompt)).strip()
+
+
 async def _interactive() -> None:
     print("Orion GitHub Agent (ADK). Type a question, or 'exit' to quit.\n")
     runner = AgentRunner()
     try:
         while True:
             try:
-                message = input("You> ").strip()
+                message = await _read_line("You> ")
             except (EOFError, KeyboardInterrupt):
                 print("\nBye.")
-                break
+                return
 
             if not message:
                 continue
             if message.lower() in {"exit", "quit", "q"}:
                 print("Bye.")
-                break
+                return
 
             print("Orion> ", end="", flush=True)
             try:
                 await _ask(runner, message)
+            except asyncio.CancelledError:
+                print("\nBye.")
+                raise
             except Exception as exc:  # noqa: BLE001 - show CLI-friendly errors
                 print(f"\nError: {exc}")
             print()
     finally:
-        await runner.close()
+        try:
+            await runner.close()
+        except (asyncio.CancelledError, Exception):
+            pass
 
 
 async def _one_shot(message: str) -> None:
@@ -48,14 +59,22 @@ async def _one_shot(message: str) -> None:
     try:
         await _ask(runner, message)
     finally:
-        await runner.close()
+        try:
+            await runner.close()
+        except (asyncio.CancelledError, Exception):
+            pass
 
 
 def main() -> None:
-    if len(sys.argv) > 1:
-        asyncio.run(_one_shot(" ".join(sys.argv[1:])))
-    else:
-        asyncio.run(_interactive())
+    try:
+        if len(sys.argv) > 1:
+            asyncio.run(_one_shot(" ".join(sys.argv[1:])))
+        else:
+            asyncio.run(_interactive())
+    except KeyboardInterrupt:
+        # Ctrl+C during asyncio.run — exit quietly without a traceback.
+        print("\nBye.")
+        sys.exit(0)
 
 
 if __name__ == "__main__":
