@@ -6,9 +6,16 @@ build-backend = "setuptools.build_meta"
 name = "orion"
 version = "0.0.1"
 requires-python = ">=3.11"
+dependencies = [
+    "python-dotenv",
+    "httpx",
+    "google-adk",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.pyright]
+venvPath = "."
+venv = ".venv"
 extraPaths = ["src"]
