@@ -1,19 +1,11 @@
-"""Orion CLI entry point — ask the GitHub agent interactively."""
+"""Orion CLI entry point — application orchestrator."""
 
 from __future__ import annotations
 
 import asyncio
 import sys
 
-from runtime.runner import AgentRunner
-
-
-async def _ask(runner: AgentRunner, message: str) -> None:
-    result = await runner.run_message(message)
-    if result["final_text"]:
-        print(result["final_text"])
-    else:
-        print("(no final response text)")
+from runtime.app import OrionApp
 
 
 async def _read_line(prompt: str) -> str:
@@ -21,9 +13,32 @@ async def _read_line(prompt: str) -> str:
     return (await asyncio.to_thread(input, prompt)).strip()
 
 
+async def _ask(app: OrionApp, message: str, session) -> None:
+    session.increment_messages()
+
+    result = await app.runner.run_message(
+        message=message,
+        session=session,
+    )
+
+    session.touch()
+
+    if result["final_text"]:
+        print(result["final_text"])
+    else:
+        print("(no final response text)")
+
+
 async def _interactive() -> None:
     print("Orion GitHub Agent (ADK). Type a question, or 'exit' to quit.\n")
-    runner = AgentRunner()
+
+    app = OrionApp()
+    session = app.session_manager.start_conversation(
+        user_id="default-user",
+        title="GitHub Chat",
+    )
+    print(f"Session: {session.title} ({session.session_id[:8]}…)\n")
+
     try:
         while True:
             try:
@@ -40,7 +55,7 @@ async def _interactive() -> None:
 
             print("Orion> ", end="", flush=True)
             try:
-                await _ask(runner, message)
+                await _ask(app, message, session)
             except asyncio.CancelledError:
                 print("\nBye.")
                 raise
@@ -49,18 +64,22 @@ async def _interactive() -> None:
             print()
     finally:
         try:
-            await runner.close()
+            await app.close()
         except (asyncio.CancelledError, Exception):
             pass
 
 
 async def _one_shot(message: str) -> None:
-    runner = AgentRunner()
+    app = OrionApp()
+    session = app.session_manager.start_conversation(
+        user_id="default-user",
+        title="GitHub Chat",
+    )
     try:
-        await _ask(runner, message)
+        await _ask(app, message, session)
     finally:
         try:
-            await runner.close()
+            await app.close()
         except (asyncio.CancelledError, Exception):
             pass
 
@@ -72,7 +91,6 @@ def main() -> None:
         else:
             asyncio.run(_interactive())
     except KeyboardInterrupt:
-        # Ctrl+C during asyncio.run — exit quietly without a traceback.
         print("\nBye.")
         sys.exit(0)
 

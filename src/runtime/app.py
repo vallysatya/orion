@@ -1,20 +1,32 @@
-"""ADK App definition (ADK 2.4)."""
+"""
+Application bootstrap for Orion.
+"""
 
 from __future__ import annotations
 
-from google.adk.apps import App
-
 from agents.github_agent.agent import github_agent
-from config import APP_NAME
+from runtime.adk_session_adapter import ADKSessionAdapter
+from runtime.runner import AgentRunner
+from sessions.session_manager import SessionManager
 
 
-def create_app() -> App:
-    """Build the Orion ADK application.
-
-    The App is the top-level ADK container. It owns the root agent that
-    InMemoryRunner / Runner execute.
+class OrionApp:
     """
-    return App(
-        name=APP_NAME,
-        root_agent=github_agent,
-    )
+    Orion Application.
+
+    Owns long-lived application services via dependency injection
+    (no global singletons).
+    """
+
+    def __init__(self) -> None:
+        self.session_manager = SessionManager()
+        # Adapter shares one ADK SessionService with AgentRunner.
+        self.adk_sessions = ADKSessionAdapter()
+        self.runner = AgentRunner(
+            agent=github_agent,
+            session_adapter=self.adk_sessions,
+        )
+
+    async def close(self) -> None:
+        """Release runtime resources."""
+        await self.runner.close()

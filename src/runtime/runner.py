@@ -5,13 +5,17 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Any
 
+from google.adk.agents import BaseAgent
+from google.adk.apps import App
+from google.adk.artifacts import InMemoryArtifactService
 from google.adk.events import Event
-from google.adk.runners import InMemoryRunner
+from google.adk.memory import InMemoryMemoryService
+from google.adk.runners import Runner
 from google.genai import types
 
 from config import APP_NAME
-from runtime.app import create_app
-from runtime.session import get_or_create_session
+from models.session_info import SessionInfo
+from runtime.adk_session_adapter import ADKSessionAdapter
 
 
 def _user_content(message: str) -> types.Content:
@@ -35,22 +39,33 @@ def _extract_text(event: Event) -> str:
 
 
 class AgentRunner:
-    """Wraps ADK App + InMemoryRunner lifecycle and message execution.
+    """
+    Executes agent turns via ADK.
 
-    Official local/dev path in ADK 2.4:
-      App(name=..., root_agent=...)
-      InMemoryRunner(app=app)
-      await session_service.create_session(...)
-      async for event in runner.run_async(..., new_message=Content(...))
+    Owns ADK App + Runner only.
+    Does not own Orion conversation metadata (titles, favorites, etc.).
+    Uses ADKSessionAdapter to map SessionInfo → ADK SessionService.
     """
 
-    def __init__(self) -> None:
-        self._app = create_app()
-        # Prefer App-based construction (recommended in ADK 2.x).
-        self._runner = InMemoryRunner(app=self._app, app_name=APP_NAME)
+    def __init__(
+        self,
+        agent: BaseAgent,
+        *,
+        session_adapter: ADKSessionAdapter,
+    ) -> None:
+        self._adk_app = App(name=APP_NAME, root_agent=agent)
+        self._session_adapter = session_adapter
+        # Share the adapter's SessionService so create/get stay in sync.
+        self._runner = Runner(
+            app=self._adk_app,
+            app_name=APP_NAME,
+            session_service=session_adapter.service,
+            artifact_service=InMemoryArtifactService(),
+            memory_service=InMemoryMemoryService(),
+        )
 
     @property
-    def runner(self) -> InMemoryRunner:
+    def runner(self) -> Runner:
         return self._runner
 
     @property
@@ -61,20 +76,15 @@ class AgentRunner:
         self,
         message: str,
         *,
-        user_id: str | None = None,
-        session_id: str | None = None,
+        session: SessionInfo,
     ) -> AsyncIterator[Event]:
         """Stream ADK events for one user message."""
-        session = await get_or_create_session(
-            self._runner,
-            user_id=user_id,
-            session_id=session_id,
-        )
+        adk_session = await self._session_adapter.ensure_session(session)
         new_message = _user_content(message)
 
         async for event in self._runner.run_async(
-            user_id=session.user_id,
-            session_id=session.id,
+            user_id=adk_session.user_id,
+            session_id=adk_session.id,
             new_message=new_message,
         ):
             yield event
@@ -83,18 +93,13 @@ class AgentRunner:
         self,
         message: str,
         *,
-        user_id: str | None = None,
-        session_id: str | None = None,
+        session: SessionInfo,
     ) -> dict[str, Any]:
         """Run one message and return events + final text response."""
         events: list[Event] = []
         final_text = ""
 
-        async for event in self.stream_message(
-            message,
-            user_id=user_id,
-            session_id=session_id,
-        ):
+        async for event in self.stream_message(message, session=session):
             events.append(event)
             text = _extract_text(event)
             if event.is_final_response() and text:

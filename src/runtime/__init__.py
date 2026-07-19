@@ -1,13 +1,7 @@
-"""ADK runtime package.
+"""Orion runtime package."""
 
-Uses Google ADK 2.4 public APIs:
-- App
-- InMemoryRunner
-- session_service.create_session
-- run_async + google.genai.types.Content
-"""
-
-from runtime.app import create_app
+from runtime.adk_session_adapter import ADKSessionAdapter
+from runtime.app import OrionApp
 from runtime.runner import AgentRunner
 
-__all__ = ["AgentRunner", "create_app"]
+__all__ = ["ADKSessionAdapter", "AgentRunner", "OrionApp"]

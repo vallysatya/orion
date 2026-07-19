@@ -25,5 +25,5 @@ GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 
 GITHUB_API_BASE_URL = "https://api.github.com"
 APP_NAME = "orion"
-DEFAULT_USER_ID = "default_user"
+DEFAULT_USER_ID = "default-user"
 DEFAULT_SESSION_ID = "default_session"
