@@ -4,7 +4,7 @@ Application bootstrap for Orion.
 
 from __future__ import annotations
 
-from agents.github_agent.agent import github_agent
+from agents.coordinator_agent import coordinator_agent
 from runtime.adk_session_adapter import ADKSessionAdapter
 from runtime.runner import AgentRunner
 from sessions.session_manager import SessionManager
@@ -23,7 +23,7 @@ class OrionApp:
         # Adapter shares one ADK SessionService with AgentRunner.
         self.adk_sessions = ADKSessionAdapter()
         self.runner = AgentRunner(
-            agent=github_agent,
+            agent=coordinator_agent,
             session_adapter=self.adk_sessions,
         )
 

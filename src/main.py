@@ -30,12 +30,12 @@ async def _ask(app: OrionApp, message: str, session) -> None:
 
 
 async def _interactive() -> None:
-    print("Orion GitHub Agent (ADK). Type a question, or 'exit' to quit.\n")
+    print("Orion (ADK). Type a question, or 'exit' to quit.\n")
 
     app = OrionApp()
     session = app.session_manager.start_conversation(
         user_id="default-user",
-        title="GitHub Chat",
+        title="Orion Chat",
     )
     print(f"Session: {session.title} ({session.session_id[:8]}…)\n")
 
@@ -73,7 +73,7 @@ async def _one_shot(message: str) -> None:
     app = OrionApp()
     session = app.session_manager.start_conversation(
         user_id="default-user",
-        title="GitHub Chat",
+        title="Orion Chat",
     )
     try:
         await _ask(app, message, session)

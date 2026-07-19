@@ -28,6 +28,19 @@ def get_repository_info(owner: str, repo: str) -> dict:
     return github_client.get_repository(owner, repo)
 
 
+def list_my_repositories(limit: int = 30) -> list[dict]:
+    """
+    List repositories for the authenticated GitHub account.
+
+    Args:
+        limit: Maximum number of repositories to return.
+
+    Returns:
+        Repositories owned by or accessible to the authenticated user.
+    """
+    return github_client.list_my_repositories(limit)
+
+
 def search_repositories(query: str, limit: int = 5) -> list[dict]:
     """
     Search GitHub repositories.

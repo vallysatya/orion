@@ -90,6 +90,38 @@ class GitHubClient:
         }
 
     # ------------------------------------------------------------------
+    # Authenticated user
+    # ------------------------------------------------------------------
+
+    def list_my_repositories(
+        self,
+        limit: int = 30,
+    ) -> list[dict[str, Any]]:
+        """List repositories for the authenticated GitHub user."""
+        data = self._request(
+            "GET",
+            "/user/repos",
+            params={
+                "per_page": limit,
+                "sort": "updated",
+                "affiliation": "owner,collaborator,organization_member",
+            },
+        )
+
+        return [
+            {
+                "name": repo["full_name"],
+                "private": repo["private"],
+                "stars": repo["stargazers_count"],
+                "language": repo["language"],
+                "description": repo["description"],
+                "url": repo["html_url"],
+                "updated_at": repo["updated_at"],
+            }
+            for repo in data
+        ]
+
+    # ------------------------------------------------------------------
     # Search
     # ------------------------------------------------------------------
 
