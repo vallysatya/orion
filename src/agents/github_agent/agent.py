@@ -23,6 +23,14 @@ from agents.github_agent.tools.github_tools import (
 )
 from agents.security_review_agent import security_review_agent
 from callbacks.tool_callback import before_tool_callback
+from tools.repository_memory_tools import (
+    get_current_repository,
+    remember_repository,
+)
+from tools.security_memory_tools import (
+    get_environment,
+    get_user_role,
+)
 
 security_review_tool = AgentTool(
     agent=security_review_agent,
@@ -37,6 +45,10 @@ github_agent = Agent(
     ),
     instruction=GITHUB_AGENT_PROMPT,
     tools=[
+        remember_repository,
+        get_current_repository,
+        get_environment,
+        get_user_role,
         security_review_tool,
         list_my_repositories,
         get_repository_info,
@@ -52,4 +64,3 @@ github_agent = Agent(
     ],
     before_tool_callback=before_tool_callback,
 )
-

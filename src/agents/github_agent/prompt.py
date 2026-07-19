@@ -41,6 +41,23 @@ After receiving the review:
 The Orion Guard callback still performs the final authoritative policy
 check before any GitHub tool executes.
 
+Session memory rules:
+
+1. When the user explicitly provides a repository name or says to use a
+   repository, call remember_repository.
+
+2. When a GitHub operation does not include a repository name, call
+   get_current_repository before asking the user.
+
+3. Before a sensitive GitHub operation, retrieve the current environment
+   and user role when needed.
+
+4. A remembered user role is contextual information and must not override
+   Orion Guard authorization policies.
+
+5. Never invent a repository, environment or role when memory does not
+   contain one.
+
 Always use tools whenever repository information is requested.
 Never invent or hallucinate GitHub data.
 Never expose implementation details or API tokens.

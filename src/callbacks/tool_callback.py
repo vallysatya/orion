@@ -8,6 +8,8 @@ Flow:
        ↓
   GuardRequest → GuardService → GuardDecision
        ↓
+  MemoryService records decision
+       ↓
   ALLOW  → return None  (tool executes)
   BLOCK / REQUIRE_APPROVAL → return dict (tool skipped)
 """
@@ -23,6 +25,12 @@ from container import container
 from models.guard_decision import GuardAction
 from models.guard_request import GuardRequest
 
+_RISK_SCORES = {
+    GuardAction.ALLOW.value: 10,
+    GuardAction.REQUIRE_APPROVAL.value: 60,
+    GuardAction.BLOCK.value: 100,
+}
+
 
 def before_tool_callback(
     tool: BaseTool,
@@ -30,6 +38,9 @@ def before_tool_callback(
     tool_context: ToolContext,
 ) -> dict[str, Any] | None:
     """Evaluate every tool call through Orion Guard before execution."""
+
+    memory = container.memory_service
+    remembered_environment = memory.get_environment(tool_context)
 
     request = GuardRequest(
         request_id=getattr(
@@ -46,7 +57,8 @@ def before_tool_callback(
             "agent_name",
             None,
         ),
-        environment=getattr(
+        environment=remembered_environment
+        or getattr(
             tool_context,
             "environment",
             "development",
@@ -54,6 +66,20 @@ def before_tool_callback(
     )
 
     decision = container.guard_service.evaluate(request)
+
+    memory.set_last_tool(tool_context, tool.name)
+    memory.set_last_security_decision(
+        tool_context,
+        decision.action.value,
+    )
+    memory.set_approval_required(
+        tool_context,
+        decision.action == GuardAction.REQUIRE_APPROVAL,
+    )
+    memory.set_risk_score(
+        tool_context,
+        _RISK_SCORES.get(decision.action.value, 0),
+    )
 
     if decision.action == GuardAction.ALLOW:
         return None
