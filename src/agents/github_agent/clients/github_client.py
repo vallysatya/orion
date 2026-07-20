@@ -7,17 +7,25 @@ It is intentionally independent of Google ADK so it can be reused by any service
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 import httpx
 
 from config import GITHUB_API_BASE_URL, GITHUB_TOKEN
+from observability.metrics.metrics_service import MetricsService
+from observability.trace_service import TraceService
 
 
 class GitHubClient:
     """Reusable GitHub REST API client."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        trace_service: TraceService | None = None,
+        metrics_service: MetricsService | None = None,
+    ) -> None:
         headers = {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
@@ -30,6 +38,28 @@ class GitHubClient:
             timeout=30.0,
             headers=headers,
         )
+        self._trace_service = trace_service
+        self._metrics_service = metrics_service
+
+    def _trace(self) -> TraceService | None:
+        if self._trace_service is not None:
+            return self._trace_service
+        try:
+            from container import container
+
+            return container.trace_service
+        except Exception:  # noqa: BLE001 - tracing must never break API calls
+            return None
+
+    def _metrics(self) -> MetricsService | None:
+        if self._metrics_service is not None:
+            return self._metrics_service
+        try:
+            from container import container
+
+            return container.metrics_service
+        except Exception:  # noqa: BLE001 - metrics must never break API calls
+            return None
 
     def _request(
         self,
@@ -43,15 +73,73 @@ class GitHubClient:
         Raises:
             RuntimeError: if GitHub returns an error.
         """
-        response = self._client.request(
-            method=method,
-            url=endpoint,
-            params=params,
-        )
+        trace = self._trace()
+        metrics = self._metrics()
+        if metrics is not None:
+            metrics.record_github_request_started()
+        if trace is not None:
+            trace.record(
+                component="GitHubClient",
+                event="GitHubApiRequestStarted",
+                metadata={
+                    "method": method,
+                    "endpoint": endpoint,
+                },
+            )
+
+        started = time.perf_counter()
+        try:
+            response = self._client.request(
+                method=method,
+                url=endpoint,
+                params=params,
+            )
+        except Exception as exc:
+            duration_ms = (time.perf_counter() - started) * 1000
+            if metrics is not None:
+                metrics.record_github_request_failed(duration_ms)
+            if trace is not None:
+                trace.record(
+                    component="GitHubClient",
+                    event="GitHubApiRequestFailed",
+                    metadata={
+                        "method": method,
+                        "endpoint": endpoint,
+                        "error_type": type(exc).__name__,
+                    },
+                )
+            raise
+
+        duration_ms = (time.perf_counter() - started) * 1000
 
         if response.status_code >= 400:
+            if metrics is not None:
+                metrics.record_github_request_failed(duration_ms)
+            if trace is not None:
+                trace.record(
+                    component="GitHubClient",
+                    event="GitHubApiRequestFailed",
+                    metadata={
+                        "method": method,
+                        "endpoint": endpoint,
+                        "status_code": response.status_code,
+                    },
+                )
             raise RuntimeError(
                 f"GitHub API Error {response.status_code}: {response.text}"
+            )
+
+        if metrics is not None:
+            metrics.record_github_request_succeeded(duration_ms)
+        if trace is not None:
+            trace.record(
+                component="GitHubClient",
+                event="GitHubApiRequestSucceeded",
+                metadata={
+                    "method": method,
+                    "endpoint": endpoint,
+                    "status_code": response.status_code,
+                },
             )
 
         if response.status_code == 204 or not response.content:
@@ -301,20 +389,7 @@ class GitHubClient:
         repo: str,
     ) -> list[str]:
         """Retrieve repository topics."""
-        response = self._client.get(
-            f"/repos/{owner}/{repo}/topics",
-            headers={
-                **self._client.headers,
-                "Accept": "application/vnd.github.mercy-preview+json",
-            },
-        )
-
-        if response.status_code >= 400:
-            raise RuntimeError(
-                f"GitHub API Error {response.status_code}: {response.text}"
-            )
-
-        data = response.json()
+        data = self._request("GET", f"/repos/{owner}/{repo}/topics")
         return list(data.get("names", []))
 
     def get_license(

@@ -3,7 +3,7 @@ from google.adk.agents import Agent
 from agents.general_agent import general_agent
 from agents.github_agent import github_agent
 from agents.security_agent import security_agent
-from callbacks.tool_callback import before_tool_callback
+from callbacks.tool_callback import after_tool_callback, before_tool_callback
 from tools.security_memory_tools import (
     get_environment,
     remember_environment,
@@ -61,4 +61,5 @@ Do not invent the result of a tool execution.
         general_agent,
     ],
     before_tool_callback=before_tool_callback,
+    after_tool_callback=after_tool_callback,
 )

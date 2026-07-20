@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from models.guard_decision import GuardAction
 from models.guard_request import GuardRequest
+from observability.metrics.metrics_registry import MetricsRegistry
+from observability.metrics.metrics_service import MetricsService
+from observability.trace import Trace
+from observability.trace_service import TraceService
 from policies.approval_policy import ApprovalPolicy
 from policies.destructive_action_policy import DestructiveActionPolicy
 from policies.environment_policy import EnvironmentPolicy
@@ -20,7 +24,9 @@ def build_guard() -> GuardService:
             EnvironmentPolicy(),
             DestructiveActionPolicy(),
             ApprovalPolicy(),
-        ]
+        ],
+        trace_service=TraceService(trace=Trace()),
+        metrics_service=MetricsService(registry=MetricsRegistry()),
     )
 
 

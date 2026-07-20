@@ -14,6 +14,10 @@ from memory.policies.persistence_policy import PersistencePolicy
 from memory.policies.session_policy import SessionPolicy
 from memory.sqlite_memory import SQLiteMemory
 from memory.state_keys import StateKey
+from observability.metrics.metrics_registry import MetricsRegistry
+from observability.metrics.metrics_service import MetricsService
+from observability.trace import Trace
+from observability.trace_service import TraceService
 
 
 def _build_memory(db_path: str) -> tuple[MemoryService, SQLiteMemory]:
@@ -28,6 +32,8 @@ def _build_memory(db_path: str) -> tuple[MemoryService, SQLiteMemory]:
     return MemoryService(
         persistent_memory=sqlite,
         policy_engine=engine,
+        trace_service=TraceService(trace=Trace()),
+        metrics_service=MetricsService(registry=MetricsRegistry()),
     ), sqlite
 
 

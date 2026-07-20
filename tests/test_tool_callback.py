@@ -21,6 +21,7 @@ def _run_callback(
     tool_context.invocation_id = "request-001"
     tool_context.agent_name = "github_agent"
     tool_context.environment = environment
+    tool_context.state = {"environment": environment}
 
     return before_tool_callback(
         tool=tool,

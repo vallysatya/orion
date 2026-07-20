@@ -11,6 +11,10 @@ from memory.policies.dual_memory_policy import DualMemoryPolicy
 from memory.policies.persistence_policy import PersistencePolicy
 from memory.policies.session_policy import SessionPolicy
 from memory.sqlite_memory import SQLiteMemory
+from observability.metrics.metrics_registry import MetricsRegistry
+from observability.metrics.metrics_service import MetricsService
+from observability.trace import Trace
+from observability.trace_service import TraceService
 
 
 def test_persistent_preferences() -> None:
@@ -26,6 +30,8 @@ def test_persistent_preferences() -> None:
                     SessionPolicy(),
                 ],
             ),
+            trace_service=TraceService(trace=Trace()),
+            metrics_service=MetricsService(registry=MetricsRegistry()),
         )
 
         try:

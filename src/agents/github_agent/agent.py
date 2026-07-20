@@ -22,7 +22,7 @@ from agents.github_agent.tools.github_tools import (
     search_repositories,
 )
 from agents.security_review_agent import security_review_agent
-from callbacks.tool_callback import before_tool_callback
+from callbacks.tool_callback import after_tool_callback, before_tool_callback
 from tools.repository_memory_tools import (
     get_current_repository,
     remember_repository,
@@ -63,4 +63,5 @@ github_agent = Agent(
         get_repository_license,
     ],
     before_tool_callback=before_tool_callback,
+    after_tool_callback=after_tool_callback,
 )

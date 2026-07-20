@@ -1,6 +1,6 @@
 from google.adk.agents import Agent
 
-from callbacks.tool_callback import before_tool_callback
+from callbacks.tool_callback import after_tool_callback, before_tool_callback
 from tools.security_memory_tools import (
     get_environment,
     get_last_security_decision,
@@ -50,4 +50,5 @@ Explain security decisions clearly and concisely.
         get_last_security_decision,
     ],
     before_tool_callback=before_tool_callback,
+    after_tool_callback=after_tool_callback,
 )

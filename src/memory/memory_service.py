@@ -1,11 +1,17 @@
-from typing import Any
-
-from google.adk.tools.tool_context import ToolContext
+from typing import Any, Protocol
 
 from memory.memory_decision import MemoryStorage
 from memory.memory_policy_engine import MemoryPolicyEngine
 from memory.persistent_memory import PersistentMemory
 from memory.state_keys import StateKey
+from observability.metrics.metrics_service import MetricsService
+from observability.trace_service import TraceService
+
+
+class SessionContext(Protocol):
+    """Minimal session handle required by MemoryService."""
+
+    state: Any
 
 
 class MemoryService:
@@ -20,16 +26,20 @@ class MemoryService:
         self,
         persistent_memory: PersistentMemory,
         policy_engine: MemoryPolicyEngine,
+        trace_service: TraceService,
+        metrics_service: MetricsService,
     ):
         self._persistent_memory = persistent_memory
         self._policy_engine = policy_engine
+        self._trace_service = trace_service
+        self._metrics_service = metrics_service
 
     @staticmethod
     def _key_name(key: StateKey | str) -> str:
         return key.value if isinstance(key, StateKey) else key
 
     @staticmethod
-    def _delete_session_key(tool_context: ToolContext, key_name: str) -> None:
+    def _delete_session_key(tool_context: SessionContext, key_name: str) -> None:
         state = tool_context.state
         if isinstance(state, dict):
             state.pop(key_name, None)
@@ -49,66 +59,158 @@ class MemoryService:
 
     def get(
         self,
-        tool_context: ToolContext,
+        tool_context: SessionContext,
         key: StateKey | str,
         default: Any = None,
     ) -> Any:
         key_name = self._key_name(key)
+
+        self._trace_service.record(
+            component="MemoryService",
+            event="MemoryReadRequested",
+            metadata={"key": key_name},
+        )
+
         if key_name in tool_context.state:
+            self._trace_service.record(
+                component="MemoryService",
+                event="SessionValueFound",
+                metadata={"key": key_name},
+            )
+            self._metrics_service.record_memory_hit()
             return tool_context.state.get(key_name, default)
+
+        self._trace_service.record(
+            component="MemoryService",
+            event="SessionValueMissing",
+            metadata={"key": key_name},
+        )
 
         # Hydrate session from persistent storage when available.
         persistent_value = self._persistent_memory.get(key_name)
         if persistent_value is not None:
+            self._trace_service.record(
+                component="MemoryService",
+                event="PersistentValueFound",
+                metadata={"key": key_name},
+            )
             tool_context.state[key_name] = persistent_value
+            self._trace_service.record(
+                component="MemoryService",
+                event="SessionHydrated",
+                metadata={"key": key_name},
+            )
+            self._metrics_service.record_memory_hit()
             return persistent_value
 
+        self._trace_service.record(
+            component="MemoryService",
+            event="MemoryValueNotFound",
+            metadata={"key": key_name},
+        )
+        self._metrics_service.record_memory_miss()
         return default
 
     def set(
         self,
-        tool_context: ToolContext,
+        tool_context: SessionContext,
         key: StateKey | str,
         value: Any,
     ) -> None:
         key_name = self._key_name(key)
+
+        self._trace_service.record(
+            component="MemoryService",
+            event="MemoryWriteRequested",
+            metadata={"key": key_name},
+        )
+
         decision = self._policy_engine.decide(key=key_name, value=value)
+
+        self._trace_service.record(
+            component="MemoryPolicyEngine",
+            event="StorageDecisionMade",
+            metadata={
+                "key": key_name,
+                "storage": decision.storage.value,
+            },
+        )
 
         if decision.storage in {
             MemoryStorage.SESSION,
             MemoryStorage.BOTH,
         }:
             tool_context.state[key_name] = value
+            self._trace_service.record(
+                component="MemoryService",
+                event="SessionValueWritten",
+                metadata={"key": key_name},
+            )
 
         if decision.storage in {
             MemoryStorage.PERSISTENT,
             MemoryStorage.BOTH,
         }:
             self._persistent_memory.set(key_name, value)
+            self._trace_service.record(
+                component="MemoryService",
+                event="PersistentValueWritten",
+                metadata={"key": key_name},
+            )
+
+        self._metrics_service.record_memory_write()
 
     def delete(
         self,
-        tool_context: ToolContext,
+        tool_context: SessionContext,
         key: StateKey | str,
     ) -> None:
         key_name = self._key_name(key)
+
+        self._trace_service.record(
+            component="MemoryService",
+            event="MemoryDeleteRequested",
+            metadata={"key": key_name},
+        )
+
         decision = self._policy_engine.decide(key=key_name, value=None)
+
+        self._trace_service.record(
+            component="MemoryPolicyEngine",
+            event="DeleteStorageDecisionMade",
+            metadata={
+                "key": key_name,
+                "storage": decision.storage.value,
+            },
+        )
 
         if decision.storage in {
             MemoryStorage.SESSION,
             MemoryStorage.BOTH,
         }:
             self._delete_session_key(tool_context, key_name)
+            self._trace_service.record(
+                component="MemoryService",
+                event="SessionValueDeleted",
+                metadata={"key": key_name},
+            )
 
         if decision.storage in {
             MemoryStorage.PERSISTENT,
             MemoryStorage.BOTH,
         }:
             self._persistent_memory.delete(key_name)
+            self._trace_service.record(
+                component="MemoryService",
+                event="PersistentValueDeleted",
+                metadata={"key": key_name},
+            )
+
+        self._metrics_service.record_memory_delete()
 
     def exists(
         self,
-        tool_context: ToolContext,
+        tool_context: SessionContext,
         key: StateKey | str,
     ) -> bool:
         key_name = self._key_name(key)
@@ -116,7 +218,7 @@ class MemoryService:
             return True
         return self._persistent_memory.exists(key_name)
 
-    def clear(self, tool_context: ToolContext) -> None:
+    def clear(self, tool_context: SessionContext) -> None:
         state = tool_context.state
         if isinstance(state, dict):
             state.clear()
@@ -136,7 +238,7 @@ class MemoryService:
 
     def get_current_repository(
         self,
-        tool_context: ToolContext,
+        tool_context: SessionContext,
     ) -> str | None:
         return self.get(
             tool_context,
@@ -145,7 +247,7 @@ class MemoryService:
 
     def set_current_repository(
         self,
-        tool_context: ToolContext,
+        tool_context: SessionContext,
         repository: str,
     ) -> None:
         self.set(
@@ -160,7 +262,7 @@ class MemoryService:
 
     def get_user_role(
         self,
-        tool_context: ToolContext,
+        tool_context: SessionContext,
     ) -> str | None:
         return self.get(
             tool_context,
@@ -169,7 +271,7 @@ class MemoryService:
 
     def set_user_role(
         self,
-        tool_context: ToolContext,
+        tool_context: SessionContext,
         role: str,
     ) -> None:
         self.set(
@@ -180,7 +282,7 @@ class MemoryService:
 
     def get_environment(
         self,
-        tool_context: ToolContext,
+        tool_context: SessionContext,
     ) -> str:
         return self.get(
             tool_context,
@@ -190,7 +292,7 @@ class MemoryService:
 
     def set_environment(
         self,
-        tool_context: ToolContext,
+        tool_context: SessionContext,
         environment: str,
     ) -> None:
         self.set(
@@ -201,7 +303,7 @@ class MemoryService:
 
     def get_risk_score(
         self,
-        tool_context: ToolContext,
+        tool_context: SessionContext,
     ) -> int:
         return self.get(
             tool_context,
@@ -211,7 +313,7 @@ class MemoryService:
 
     def set_risk_score(
         self,
-        tool_context: ToolContext,
+        tool_context: SessionContext,
         score: int,
     ) -> None:
         self.set(
@@ -222,7 +324,7 @@ class MemoryService:
 
     def get_last_tool(
         self,
-        tool_context: ToolContext,
+        tool_context: SessionContext,
     ) -> str | None:
         return self.get(
             tool_context,
@@ -231,7 +333,7 @@ class MemoryService:
 
     def set_last_tool(
         self,
-        tool_context: ToolContext,
+        tool_context: SessionContext,
         tool_name: str,
     ) -> None:
         self.set(
@@ -242,7 +344,7 @@ class MemoryService:
 
     def get_last_security_decision(
         self,
-        tool_context: ToolContext,
+        tool_context: SessionContext,
     ) -> str | None:
         return self.get(
             tool_context,
@@ -251,7 +353,7 @@ class MemoryService:
 
     def set_last_security_decision(
         self,
-        tool_context: ToolContext,
+        tool_context: SessionContext,
         decision: str,
     ) -> None:
         self.set(
@@ -262,7 +364,7 @@ class MemoryService:
 
     def is_approval_required(
         self,
-        tool_context: ToolContext,
+        tool_context: SessionContext,
     ) -> bool:
         return self.get(
             tool_context,
@@ -272,7 +374,7 @@ class MemoryService:
 
     def set_approval_required(
         self,
-        tool_context: ToolContext,
+        tool_context: SessionContext,
         required: bool,
     ) -> None:
         self.set(
@@ -287,7 +389,7 @@ class MemoryService:
 
     def get_user_name(
         self,
-        tool_context: ToolContext,
+        tool_context: SessionContext,
     ) -> str | None:
         return self.get(
             tool_context,
@@ -296,7 +398,7 @@ class MemoryService:
 
     def set_user_name(
         self,
-        tool_context: ToolContext,
+        tool_context: SessionContext,
         name: str,
     ) -> None:
         self.set(
@@ -307,7 +409,7 @@ class MemoryService:
 
     def get_preferred_language(
         self,
-        tool_context: ToolContext,
+        tool_context: SessionContext,
     ) -> str:
         return self.get(
             tool_context,
@@ -317,7 +419,7 @@ class MemoryService:
 
     def set_preferred_language(
         self,
-        tool_context: ToolContext,
+        tool_context: SessionContext,
         language: str,
     ) -> None:
         self.set(
@@ -328,7 +430,7 @@ class MemoryService:
 
     def get_explanation_style(
         self,
-        tool_context: ToolContext,
+        tool_context: SessionContext,
     ) -> str:
         return self.get(
             tool_context,
@@ -338,7 +440,7 @@ class MemoryService:
 
     def set_explanation_style(
         self,
-        tool_context: ToolContext,
+        tool_context: SessionContext,
         style: str,
     ) -> None:
         self.set(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -15,6 +16,8 @@ from google.genai import types
 
 from config import APP_NAME
 from models.session_info import SessionInfo
+from observability.metrics.metrics_service import MetricsService
+from observability.trace_service import TraceService
 from runtime.adk_session_adapter import ADKSessionAdapter
 
 
@@ -52,9 +55,13 @@ class AgentRunner:
         agent: BaseAgent,
         *,
         session_adapter: ADKSessionAdapter,
+        trace_service: TraceService,
+        metrics_service: MetricsService,
     ) -> None:
         self._adk_app = App(name=APP_NAME, root_agent=agent)
         self._session_adapter = session_adapter
+        self._trace_service = trace_service
+        self._metrics_service = metrics_service
         # Share the adapter's SessionService so create/get stay in sync.
         self._runner = Runner(
             app=self._adk_app,
@@ -79,15 +86,36 @@ class AgentRunner:
         session: SessionInfo,
     ) -> AsyncIterator[Event]:
         """Stream ADK events for one user message."""
-        adk_session = await self._session_adapter.ensure_session(session)
-        new_message = _user_content(message)
+        self._trace_service.record(
+            component="OrionRuntime",
+            event="RequestStarted",
+            metadata={
+                "session_id": session.session_id,
+                "user_id": session.user_id,
+                "message_length": len(message),
+            },
+        )
 
-        async for event in self._runner.run_async(
-            user_id=adk_session.user_id,
-            session_id=adk_session.id,
-            new_message=new_message,
-        ):
-            yield event
+        try:
+            adk_session = await self._session_adapter.ensure_session(session)
+            new_message = _user_content(message)
+
+            async for event in self._runner.run_async(
+                user_id=adk_session.user_id,
+                session_id=adk_session.id,
+                new_message=new_message,
+            ):
+                yield event
+        except Exception as exc:
+            self._trace_service.record(
+                component="OrionRuntime",
+                event="RequestFailed",
+                metadata={
+                    "session_id": session.session_id,
+                    "error_type": type(exc).__name__,
+                },
+            )
+            raise
 
     async def run_message(
         self,
@@ -98,12 +126,31 @@ class AgentRunner:
         """Run one message and return events + final text response."""
         events: list[Event] = []
         final_text = ""
+        started = time.perf_counter()
+        self._metrics_service.record_request_started()
 
-        async for event in self.stream_message(message, session=session):
-            events.append(event)
-            text = _extract_text(event)
-            if event.is_final_response() and text:
-                final_text = text
+        try:
+            async for event in self.stream_message(message, session=session):
+                events.append(event)
+                text = _extract_text(event)
+                if event.is_final_response() and text:
+                    final_text = text
+
+            duration_ms = (time.perf_counter() - started) * 1000
+            self._metrics_service.record_request_succeeded(duration_ms)
+            self._trace_service.record(
+                component="OrionRuntime",
+                event="RequestCompleted",
+                metadata={
+                    "session_id": session.session_id,
+                    "event_count": len(events),
+                    "has_final_text": bool(final_text),
+                },
+            )
+        except Exception:
+            duration_ms = (time.perf_counter() - started) * 1000
+            self._metrics_service.record_request_failed(duration_ms)
+            raise
 
         return {
             "events": events,

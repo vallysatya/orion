@@ -2,17 +2,31 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 from memory.memory_policy_engine import MemoryPolicyEngine
-from memory.memory_service import MemoryService
+from memory.memory_service import MemoryService, SessionContext
 from memory.policies.dual_memory_policy import DualMemoryPolicy
 from memory.policies.persistence_policy import PersistencePolicy
 from memory.policies.session_policy import SessionPolicy
 from memory.sqlite_memory import SQLiteMemory
+from observability.metrics.metrics_registry import MetricsRegistry
+from observability.metrics.metrics_service import MetricsService
+from observability.trace import Trace
+from observability.trace_service import TraceService
 
 
 class FakeToolContext:
+    """Test double with a plain dict session state."""
+
+    state: dict[str, Any]
+
     def __init__(self) -> None:
-        self.state: dict = {}
+        self.state = {}
+
+
+def make_tool_context() -> SessionContext:
+    return cast(SessionContext, FakeToolContext())
 
 
 def create_memory_service(tmp_path):
@@ -33,6 +47,8 @@ def create_memory_service(tmp_path):
     memory_service = MemoryService(
         persistent_memory=persistent_memory,
         policy_engine=policy_engine,
+        trace_service=TraceService(trace=Trace()),
+        metrics_service=MetricsService(registry=MetricsRegistry()),
     )
 
     return memory_service, persistent_memory
@@ -40,7 +56,7 @@ def create_memory_service(tmp_path):
 
 def test_session_key_is_stored_only_in_session(tmp_path):
     memory_service, persistent_memory = create_memory_service(tmp_path)
-    tool_context = FakeToolContext()
+    tool_context = make_tool_context()
 
     memory_service.set(
         tool_context=tool_context,
@@ -54,7 +70,7 @@ def test_session_key_is_stored_only_in_session(tmp_path):
 
 def test_persistent_key_is_stored_only_in_sqlite(tmp_path):
     memory_service, persistent_memory = create_memory_service(tmp_path)
-    tool_context = FakeToolContext()
+    tool_context = make_tool_context()
 
     memory_service.set(
         tool_context=tool_context,
@@ -68,7 +84,7 @@ def test_persistent_key_is_stored_only_in_sqlite(tmp_path):
 
 def test_dual_key_is_stored_in_both_locations(tmp_path):
     memory_service, persistent_memory = create_memory_service(tmp_path)
-    tool_context = FakeToolContext()
+    tool_context = make_tool_context()
 
     memory_service.set(
         tool_context=tool_context,
@@ -82,7 +98,7 @@ def test_dual_key_is_stored_in_both_locations(tmp_path):
 
 def test_get_hydrates_session_from_sqlite(tmp_path):
     memory_service, persistent_memory = create_memory_service(tmp_path)
-    tool_context = FakeToolContext()
+    tool_context = make_tool_context()
 
     persistent_memory.set("user_name", "Sriram")
     assert "user_name" not in tool_context.state
@@ -98,7 +114,7 @@ def test_get_hydrates_session_from_sqlite(tmp_path):
 
 def test_get_prefers_session_value_over_sqlite(tmp_path):
     memory_service, persistent_memory = create_memory_service(tmp_path)
-    tool_context = FakeToolContext()
+    tool_context = make_tool_context()
 
     persistent_memory.set("user_name", "Old Name")
     tool_context.state["user_name"] = "Current Name"
@@ -113,7 +129,7 @@ def test_get_prefers_session_value_over_sqlite(tmp_path):
 
 def test_delete_removes_session_key_only(tmp_path):
     memory_service, persistent_memory = create_memory_service(tmp_path)
-    tool_context = FakeToolContext()
+    tool_context = make_tool_context()
 
     tool_context.state["risk_score"] = 90
 
@@ -128,7 +144,7 @@ def test_delete_removes_session_key_only(tmp_path):
 
 def test_delete_removes_persistent_key(tmp_path):
     memory_service, persistent_memory = create_memory_service(tmp_path)
-    tool_context = FakeToolContext()
+    tool_context = make_tool_context()
 
     persistent_memory.set("user_name", "Sriram")
 
@@ -142,7 +158,7 @@ def test_delete_removes_persistent_key(tmp_path):
 
 def test_delete_removes_dual_key_from_both_locations(tmp_path):
     memory_service, persistent_memory = create_memory_service(tmp_path)
-    tool_context = FakeToolContext()
+    tool_context = make_tool_context()
 
     tool_context.state["default_repository"] = "orion"
     persistent_memory.set("default_repository", "orion")
@@ -158,7 +174,7 @@ def test_delete_removes_dual_key_from_both_locations(tmp_path):
 
 def test_unknown_key_defaults_to_session_storage(tmp_path):
     memory_service, persistent_memory = create_memory_service(tmp_path)
-    tool_context = FakeToolContext()
+    tool_context = make_tool_context()
 
     memory_service.set(
         tool_context=tool_context,
@@ -172,7 +188,7 @@ def test_unknown_key_defaults_to_session_storage(tmp_path):
 
 def test_exists_checks_persistent_memory(tmp_path):
     memory_service, persistent_memory = create_memory_service(tmp_path)
-    tool_context = FakeToolContext()
+    tool_context = make_tool_context()
 
     persistent_memory.set("preferred_language", "English")
 

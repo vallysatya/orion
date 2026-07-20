@@ -1,6 +1,6 @@
 from google.adk.agents import Agent
 
-from callbacks.tool_callback import before_tool_callback
+from callbacks.tool_callback import after_tool_callback, before_tool_callback
 from tools.user_memory_tools import (
     get_user_name,
     get_user_preferences,
@@ -43,4 +43,5 @@ Transfer specialized GitHub or security work to the appropriate agent.
         get_user_preferences,
     ],
     before_tool_callback=before_tool_callback,
+    after_tool_callback=after_tool_callback,
 )
