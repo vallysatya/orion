@@ -1,0 +1,18 @@
+include README.md
+include LICENSE
+include CHANGELOG.md
+
+prune tests
+prune docs/journal
+prune build
+prune dist
+
+global-exclude __pycache__
+global-exclude *.py[cod]
+global-exclude .env
+global-exclude .env.*
+global-exclude *.db
+global-exclude *.db-*
+global-exclude *.sqlite
+global-exclude *.sqlite3
+global-exclude *.log

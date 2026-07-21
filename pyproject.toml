@@ -1,22 +1,82 @@
 [build-system]
-requires = ["setuptools>=61"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "orion"
 version = "1.0.0"
+description = "A guarded, observable multi-agent platform built on Google ADK"
+readme = "README.md"
 requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "vallysatya" },
+]
+keywords = [
+    "ai",
+    "agents",
+    "google-adk",
+    "github",
+    "observability",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+]
 dependencies = [
     "python-dotenv",
     "httpx",
     "google-adk",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "build",
+    "pyright",
+    "pytest",
+]
+
+[project.urls]
+Homepage = "https://github.com/vallysatya/orion"
+Repository = "https://github.com/vallysatya/orion"
+Issues = "https://github.com/vallysatya/orion/issues"
+
 [project.scripts]
 orion = "cli.main:main"
 
+[tool.setuptools]
+package-dir = { "" = "src" }
+include-package-data = false
+py-modules = ["main"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
+namespaces = true
+include = [
+    "agents*",
+    "callbacks*",
+    "cli*",
+    "config*",
+    "container*",
+    "context*",
+    "errors*",
+    "memory*",
+    "models*",
+    "observability*",
+    "orion*",
+    "policies*",
+    "runtime*",
+    "services*",
+    "sessions*",
+    "tools*",
+]
+exclude = ["tests", "tests.*"]
 
 [tool.pyright]
 venvPath = "."
