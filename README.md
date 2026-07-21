@@ -1,170 +1,194 @@
 # Orion
 
-Orion is a multi-agent platform built on Google ADK, with a shared runtime,
-typed configuration, persistent memory, a policy-driven security guard, and
-first-class observability (tracing + metrics).
+**A guarded, observable multi-agent platform built on Google ADK.**
 
-**Version:** 1.0.0
+Orion gives developers a production-minded agent runtime: typed configuration,
+policy-enforced tool execution, dual-layer memory, structured errors, and
+in-process observability — all accessible through a focused CLI.
+
+[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](CHANGELOG.md)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 ---
 
-## Platform
+## Why Orion
+
+Most agent demos wire an LLM to a few tools and stop there. Orion treats the
+runtime as a platform:
+
+| Concern | What Orion provides |
+| --- | --- |
+| **Safety** | Policy-driven Guard evaluates every tool call before execution |
+| **Memory** | Session state + durable SQLite preferences |
+| **Observability** | Tracing and metrics on requests, tools, memory, and GitHub |
+| **Errors** | Typed `OrionError` hierarchy instead of leaking third-party exceptions |
+| **Developer UX** | CLI for run, doctor, config, guard, and memory |
 
 ```text
-Orion
-├── Runtime        AgentRunner + session management
-├── Memory         Dual memory (session + SQLite)
-├── Guard          Policy engine for tool safety
-├── Observability  Tracing + metrics
-├── Errors         Typed error hierarchy
-├── Config         Typed configuration package
-└── CLI            Developer commands
+You ──► CLI / AgentRunner ──► Coordinator Agent
+                                    │
+                    ┌───────────────┼───────────────┐
+                    ▼               ▼               ▼
+               GitHub Agent   Security Agent   General Agent
+                    │
+                    ▼
+           before_tool_callback
+                    │
+                    ▼
+              GuardService  ──► allow / block / require_approval
+                    │
+                    ▼
+              Tool execution ──► Memory / GitHub / ADK
 ```
 
 ---
 
-## Install
+## What v1.0 supports
+
+**Shipped and real**
+
+- Interactive and one-shot agent runs (`orion run`)
+- Read-only GitHub repository assistant (issues, PRs, releases, contributors, …)
+- Guard policies: prompt injection, PII, permissions, environment, destructive actions, approval classification
+- Dual memory: ADK session state + SQLite persistence
+- In-process tracing and metrics
+- Typed configuration with secret redaction
+- Developer CLI: `run`, `doctor`, `version`, `help`, `config`, `guard`, `memory`
+
+**Honest boundaries**
+
+- GitHub tools are **read-only** today (no create/merge/delete)
+- `REQUIRE_APPROVAL` classifies and skips execution; there is no resumable human-approval workflow yet
+- Sessions, traces, and metrics are **process-local** (lost when the process exits)
+- SQLite memory is the durable store; conversation history is not persisted across restarts
+- Metrics/trace/session/agent/plugin/serve CLI commands are intentionally deferred
+
+Full documentation: **[docs/README.md](docs/README.md)**
+
+---
+
+## Quickstart
+
+### 1. Install
 
 ```bash
+git clone https://github.com/vallysatya/orion.git
 cd orion
 python -m venv .venv
-# Windows
+
+# Windows PowerShell
 .venv\Scripts\Activate.ps1
+
 # macOS / Linux
 source .venv/bin/activate
 
-pip install -e .
-# or
-pip install -r requirements.txt
+pip install -e ".[dev]"
 ```
 
-Copy the sample environment file and fill in secrets:
+> Prefer a runtime-only install? Use `pip install .`  
+> `pip install -r requirements.txt` installs dependencies only — it does **not** register the `orion` command.
+
+### 2. Configure
 
 ```bash
 orion config init
-# then copy .env.example → .env and edit
+copy .env.example .env      # Windows
+# cp .env.example .env     # macOS / Linux
 ```
 
-Required for agent runs:
+Edit `.env`:
 
-- `GOOGLE_API_KEY`
-- `GITHUB_TOKEN` (for authenticated GitHub operations)
+```bash
+GOOGLE_API_KEY=your-google-api-key
+GITHUB_TOKEN=your-github-token   # optional for public repos; required for private / authenticated calls
+```
 
----
+### 3. Verify and run
 
-## CLI (v1.0)
+```bash
+orion doctor
+orion version
+orion run "summarize the orion repository"
+```
 
-Orion ships a focused CLI. Every command is backed by real implementation —
-no placeholders.
-
-### Core
-
-| Command         | Purpose                              |
-| --------------- | ------------------------------------ |
-| `orion run`     | Start interactive chat (or one-shot) |
-| `orion doctor`  | Check configuration and dependencies |
-| `orion version` | Print version                        |
-| `orion help`    | Show all commands                    |
+Interactive mode:
 
 ```bash
 orion run
-orion run "list my repositories"
-orion doctor
-orion version
+# You> list my repositories
+# You> exit
 ```
 
-### Configuration
+---
 
-| Command                 | Purpose                                      |
-| ----------------------- | -------------------------------------------- |
-| `orion config show`     | Display config (secrets redacted)            |
-| `orion config validate` | Validate typed configuration                 |
-| `orion config init`     | Write a sample `.env.example`                |
+## CLI at a glance
 
 ```bash
-orion config show
+orion run                       # interactive agent session
+orion run "list open issues"    # one-shot message
+orion doctor                    # health checks
+orion config show               # secrets redacted
 orion config validate
-orion config init --path .env.example
-orion config init --force   # overwrite existing template
-```
-
-### Guard
-
-| Command              | Purpose                               |
-| -------------------- | ------------------------------------- |
-| `orion guard status` | List loaded security policies         |
-| `orion guard test`   | Run deterministic sample evaluations  |
-
-```bash
 orion guard status
 orion guard test
-```
-
-Example `guard test` output:
-
-```text
-✔ Safe Tool Call
-✔ PII Detection
-✔ Prompt Injection Detection
-✔ Approval Flow
-```
-
-### Memory
-
-| Command               | Purpose                         |
-| --------------------- | ------------------------------- |
-| `orion memory stats`  | Show database path, entries, size |
-| `orion memory clear`  | Clear persistent memory         |
-
-```bash
 orion memory stats
 orion memory clear --yes
+orion version
+orion help
 ```
 
----
-
-## Intentionally deferred (v1.1+)
-
-These subsystems exist inside the process, but do not yet have durable
-out-of-process surfaces suitable for a standalone CLI:
-
-- `orion metrics`
-- `orion trace`
-- `orion session`
-- `orion agent`
-- `orion plugin`
-- `orion serve`
-
-Shipping them now would create commands that look complete but cannot
-reliably produce meaningful output in a new process.
+See the full reference: [docs/reference/cli.md](docs/reference/cli.md)
 
 ---
 
-## Architecture highlights
+## Architecture
 
-- **Typed config** — `OrionConfig` with `GitHubConfig`, `RuntimeConfig`,
-  `MemoryConfig`; secrets never appear in `repr`, errors, or CLI output.
-- **Guard policies** — prompt injection, PII, permissions, environment,
-  destructive actions, and approval gates.
-- **Error model** — `OrionError` hierarchy (`GitHubIntegrationError`,
-  `MemoryOperationError`, `GuardEvaluationError`, …).
-- **Observability** — in-process tracing and metrics wired into runtime,
-  guard, memory, and GitHub client.
+```text
+Orion
+├── Runtime         AgentRunner + ADK session adapter
+├── Agents          Coordinator → GitHub / Security / General
+├── Guard           Ordered policy evaluation on every tool call
+├── Memory          Session (ADK) + Persistent (SQLite)
+├── Observability   TraceService + MetricsService
+├── Errors          OrionError hierarchy
+├── Config          Typed OrionConfig + ConfigLoader
+└── CLI             Developer commands (no placeholders)
+```
+
+Deep dive: [docs/concepts/architecture.md](docs/concepts/architecture.md)
 
 ---
 
 ## Development
 
 ```bash
-cd orion
-$env:PYTHONPATH = "src"   # Windows PowerShell
+pip install -e ".[dev]"
 pytest -q
+python -m build
+orion version
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) and [ROADMAP.md](ROADMAP.md).
+- Contributing: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Testing: [docs/development/testing.md](docs/development/testing.md)
+- Roadmap: [ROADMAP.md](ROADMAP.md)
+- Changelog: [CHANGELOG.md](CHANGELOG.md)
+- Security: [SECURITY.md](SECURITY.md)
+
+---
+
+## Documentation map
+
+| Section | Start here |
+| --- | --- |
+| Getting started | [Installation](docs/getting-started/installation.md) · [Quickstart](docs/getting-started/quickstart.md) · [Configuration](docs/getting-started/configuration.md) |
+| Concepts | [Architecture](docs/concepts/architecture.md) · [Guard](docs/concepts/guard-and-approvals.md) · [Memory](docs/concepts/memory-model.md) · [Observability](docs/concepts/observability.md) |
+| Guides | [GitHub assistant](docs/guides/github-assistant.md) · [Security guard](docs/guides/security-guard.md) · [Memory](docs/guides/memory-management.md) · [Troubleshooting](docs/guides/troubleshooting.md) |
+| Reference | [CLI](docs/reference/cli.md) · [Config](docs/reference/configuration.md) · [Metrics](docs/reference/metrics.md) · [Errors](docs/reference/errors.md) |
+| Development | [Extending](docs/development/extending-orion.md) · [Testing](docs/development/testing.md) · [Releases](docs/development/release-process.md) |
 
 ---
 
 ## License
 
-See [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).
