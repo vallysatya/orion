@@ -1,6 +1,6 @@
 from dataclasses import dataclass
-from pathlib import Path
 
+from config import MEMORY_DATABASE_PATH
 from memory.memory_policy_engine import MemoryPolicyEngine
 from memory.memory_service import MemoryService
 from memory.persistent_memory import PersistentMemory
@@ -15,6 +15,7 @@ from observability.metrics.metrics_service import MetricsService
 from observability.trace import Trace
 from observability.trace_service import TraceService
 from policies.approval_policy import ApprovalPolicy
+from policies.base_policy import BasePolicy
 from policies.destructive_action_policy import DestructiveActionPolicy
 from policies.environment_policy import EnvironmentPolicy
 from policies.permission_policy import PermissionPolicy
@@ -22,8 +23,34 @@ from policies.pii_policy import PIIPolicy
 from policies.prompt_injection_policy import PromptInjectionPolicy
 from services.guard_service import GuardService
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[2]
-_DEFAULT_MEMORY_DB = _PROJECT_ROOT / "orion_memory.db"
+
+def build_guard_policies() -> list[BasePolicy]:
+    """Return Orion's standard guard policies, in evaluation order."""
+    return [
+        PromptInjectionPolicy(),
+        PIIPolicy(),
+        PermissionPolicy(),
+        EnvironmentPolicy(),
+        DestructiveActionPolicy(),
+        ApprovalPolicy(),
+    ]
+
+
+def build_guard_service(
+    *,
+    trace_service: TraceService | None = None,
+    metrics_service: MetricsService | None = None,
+) -> GuardService:
+    """Build an isolated GuardService (no storage) for tooling and tests."""
+    trace_service = trace_service or TraceService(trace=Trace())
+    metrics_service = metrics_service or MetricsService(
+        registry=MetricsRegistry()
+    )
+    return GuardService(
+        policies=build_guard_policies(),
+        trace_service=trace_service,
+        metrics_service=metrics_service,
+    )
 
 
 @dataclass(frozen=True)
@@ -56,23 +83,15 @@ def build_application_container() -> ApplicationContainer:
     metrics_service = MetricsService(registry=metrics_registry)
 
     # 3. Policies + Guard
-    guard_policies = [
-        PromptInjectionPolicy(),
-        PIIPolicy(),
-        PermissionPolicy(),
-        EnvironmentPolicy(),
-        DestructiveActionPolicy(),
-        ApprovalPolicy(),
-    ]
     guard_service = GuardService(
-        policies=guard_policies,
+        policies=build_guard_policies(),
         trace_service=trace_service,
         metrics_service=metrics_service,
     )
 
     # 4. Storage
     persistent_memory = SQLiteMemory(
-        database_path=str(_DEFAULT_MEMORY_DB),
+        database_path=MEMORY_DATABASE_PATH,
     )
 
     # 5. Services

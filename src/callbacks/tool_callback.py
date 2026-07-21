@@ -19,6 +19,7 @@ from google.adk.tools.base_tool import BaseTool
 from google.adk.tools.tool_context import ToolContext
 
 from container import container
+from errors import OrionError, ToolExecutionError
 from models.guard_decision import GuardAction
 from models.guard_request import GuardRequest
 
@@ -48,77 +49,94 @@ def before_tool_callback(
     metrics = container.metrics_service
     memory = container.memory_service
 
-    trace.record(
-        component="ToolCallback",
-        event="ToolCallbackStarted",
-        metadata={
-            "tool": tool.name,
-            "agent": getattr(tool_context, "agent_name", None),
-        },
-    )
+    try:
+        trace.record(
+            component="ToolCallback",
+            event="ToolCallbackStarted",
+            metadata={
+                "tool": tool.name,
+                "agent": getattr(tool_context, "agent_name", None),
+            },
+        )
 
-    remembered_environment = memory.get_environment(tool_context)
+        remembered_environment = memory.get_environment(tool_context)
 
-    request = GuardRequest(
-        request_id=getattr(
+        request = GuardRequest(
+            request_id=getattr(
+                tool_context,
+                "invocation_id",
+                "unknown-request",
+            ),
+            user_id="unknown-user",
+            session_id="unknown-session",
+            tool_name=tool.name,
+            arguments=args,
+            agent_name=getattr(
+                tool_context,
+                "agent_name",
+                None,
+            ),
+            environment=remembered_environment
+            or getattr(
+                tool_context,
+                "environment",
+                "development",
+            ),
+        )
+
+        decision = container.guard_service.evaluate(request)
+
+        memory.set_last_tool(tool_context, tool.name)
+        memory.set_last_security_decision(
             tool_context,
-            "invocation_id",
-            "unknown-request",
-        ),
-        user_id="unknown-user",
-        session_id="unknown-session",
-        tool_name=tool.name,
-        arguments=args,
-        agent_name=getattr(
+            decision.action.value,
+        )
+        memory.set_approval_required(
             tool_context,
-            "agent_name",
-            None,
-        ),
-        environment=remembered_environment
-        or getattr(
+            decision.action == GuardAction.REQUIRE_APPROVAL,
+        )
+        memory.set_risk_score(
             tool_context,
-            "environment",
-            "development",
-        ),
-    )
+            _RISK_SCORES.get(decision.action.value, 0),
+        )
 
-    decision = container.guard_service.evaluate(request)
+        trace.record(
+            component="ToolCallback",
+            event=_OUTCOME_EVENTS[decision.action],
+            metadata={
+                "tool": tool.name,
+                "decision": decision.action.value,
+                "policy": decision.policy,
+            },
+        )
 
-    memory.set_last_tool(tool_context, tool.name)
-    memory.set_last_security_decision(
-        tool_context,
-        decision.action.value,
-    )
-    memory.set_approval_required(
-        tool_context,
-        decision.action == GuardAction.REQUIRE_APPROVAL,
-    )
-    memory.set_risk_score(
-        tool_context,
-        _RISK_SCORES.get(decision.action.value, 0),
-    )
+        if decision.action == GuardAction.ALLOW:
+            metrics.record_tool_started()
+            tool_context.state[_TOOL_START_STATE_KEY] = time.perf_counter()
+            return None
 
-    trace.record(
-        component="ToolCallback",
-        event=_OUTCOME_EVENTS[decision.action],
-        metadata={
-            "tool": tool.name,
-            "decision": decision.action.value,
+        return {
+            "status": decision.action.value,
+            "reason": decision.reason,
             "policy": decision.policy,
-        },
-    )
-
-    if decision.action == GuardAction.ALLOW:
-        metrics.record_tool_started()
-        tool_context.state[_TOOL_START_STATE_KEY] = time.perf_counter()
-        return None
-
-    return {
-        "status": decision.action.value,
-        "reason": decision.reason,
-        "policy": decision.policy,
-        "tool_name": tool.name,
-    }
+            "tool_name": tool.name,
+        }
+    except OrionError:
+        raise
+    except Exception as exc:
+        metrics.record_tool_failed()
+        trace.record(
+            component="ToolCallback",
+            event="ToolCallbackFailed",
+            metadata={
+                "tool": tool.name,
+                "error_type": type(exc).__name__,
+            },
+        )
+        raise ToolExecutionError(
+            "Tool callback failed before execution",
+            tool_name=tool.name,
+        ) from exc
 
 
 def after_tool_callback(

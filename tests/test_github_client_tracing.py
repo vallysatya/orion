@@ -1,6 +1,7 @@
 from unittest.mock import Mock
 
 from agents.github_agent.clients.github_client import GitHubClient
+from errors import GitHubIntegrationError
 from observability.trace import Trace
 from observability.trace_service import TraceService
 
@@ -39,9 +40,9 @@ def test_github_client_records_failed_request():
 
     try:
         client._request("GET", "/repos/missing/repo")
-        assert False, "expected RuntimeError"
-    except RuntimeError:
-        pass
+        assert False, "expected GitHubIntegrationError"
+    except GitHubIntegrationError as exc:
+        assert exc.status_code == 404
 
     event_names = [event.event for event in trace.events]
     assert "GitHubApiRequestStarted" in event_names

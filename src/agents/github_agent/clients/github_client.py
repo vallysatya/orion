@@ -13,6 +13,7 @@ from typing import Any
 import httpx
 
 from config import GITHUB_API_BASE_URL, GITHUB_TOKEN
+from errors import GitHubIntegrationError
 from observability.metrics.metrics_service import MetricsService
 from observability.trace_service import TraceService
 
@@ -71,7 +72,7 @@ class GitHubClient:
         Send an HTTP request to GitHub.
 
         Raises:
-            RuntimeError: if GitHub returns an error.
+            GitHubIntegrationError: if the request fails or GitHub returns an error.
         """
         trace = self._trace()
         metrics = self._metrics()
@@ -108,7 +109,12 @@ class GitHubClient:
                         "error_type": type(exc).__name__,
                     },
                 )
-            raise
+            raise GitHubIntegrationError(
+                "GitHub request failed",
+                operation="_request",
+                method=method,
+                endpoint=endpoint,
+            ) from exc
 
         duration_ms = (time.perf_counter() - started) * 1000
 
@@ -125,8 +131,12 @@ class GitHubClient:
                         "status_code": response.status_code,
                     },
                 )
-            raise RuntimeError(
-                f"GitHub API Error {response.status_code}: {response.text}"
+            raise GitHubIntegrationError(
+                f"GitHub API error {response.status_code}",
+                operation="_request",
+                method=method,
+                endpoint=endpoint,
+                status_code=response.status_code,
             )
 
         if metrics is not None:
@@ -406,9 +416,12 @@ class GitHubClient:
                 "spdx_id": data["license"].get("spdx_id"),
                 "url": data.get("html_url"),
             }
-        except RuntimeError as exc:
-            if "404" in str(exc):
-                return {"name": None, "message": "No license detected for this repository."}
+        except GitHubIntegrationError as exc:
+            if exc.status_code == 404:
+                return {
+                    "name": None,
+                    "message": "No license detected for this repository.",
+                }
             raise
 
     def close(self) -> None:

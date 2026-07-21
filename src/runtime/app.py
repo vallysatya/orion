@@ -5,6 +5,7 @@ Application bootstrap for Orion.
 from __future__ import annotations
 
 from agents.coordinator_agent import coordinator_agent
+from config import validate_configuration
 from container import container
 from runtime.adk_session_adapter import ADKSessionAdapter
 from runtime.runner import AgentRunner
@@ -19,7 +20,13 @@ class OrionApp:
     (no global singletons).
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        require_google_api_key: bool = False,
+    ) -> None:
+        validate_configuration(require_google_api_key=require_google_api_key)
+
         self.session_manager = SessionManager()
         # Adapter shares one ADK SessionService with AgentRunner.
         self.adk_sessions = ADKSessionAdapter()

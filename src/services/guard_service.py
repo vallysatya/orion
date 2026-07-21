@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 
+from errors import GuardEvaluationError, OrionError
 from models.guard_decision import GuardAction, GuardDecision
 from models.guard_request import GuardRequest
 from observability.metrics.metrics_service import MetricsService
@@ -32,6 +33,11 @@ class GuardService:
         self._trace_service = trace_service
         self._metrics_service = metrics_service
 
+    @property
+    def policies(self) -> tuple[BasePolicy, ...]:
+        """Return the policies evaluated by this guard, in order."""
+        return tuple(self._policies)
+
     def evaluate(
         self,
         request: GuardRequest,
@@ -47,36 +53,73 @@ class GuardService:
             },
         )
 
-        for policy in self._policies:
-            self._trace_service.record(
-                component="GuardService",
-                event="PolicyEvaluationStarted",
-                metadata={
-                    "policy": policy.__class__.__name__,
-                    "tool": tool_name,
-                },
-            )
-
-            decision = policy.evaluate(request)
-
-            if decision is not None:
+        try:
+            for policy in self._policies:
+                policy_name = policy.__class__.__name__
                 self._trace_service.record(
                     component="GuardService",
-                    event="PolicyMatched",
+                    event="PolicyEvaluationStarted",
                     metadata={
-                        "policy": policy.__class__.__name__,
+                        "policy": policy_name,
                         "tool": tool_name,
-                        "decision": decision.action.value,
                     },
                 )
-                return self._finalize(tool_name, decision)
 
-        decision = GuardDecision(
-            action=GuardAction.ALLOW,
-            reason="Tool execution allowed.",
-            policy="default_policy",
-        )
-        return self._finalize(tool_name, decision)
+                try:
+                    decision = policy.evaluate(request)
+                except OrionError:
+                    raise
+                except Exception as exc:
+                    self._trace_service.record(
+                        component="GuardService",
+                        event="PolicyEvaluationFailed",
+                        metadata={
+                            "policy": policy_name,
+                            "tool": tool_name,
+                            "error_type": type(exc).__name__,
+                        },
+                    )
+                    raise GuardEvaluationError(
+                        f"Policy evaluation failed: {policy_name}",
+                        tool_name=tool_name,
+                        policy=policy_name,
+                    ) from exc
+
+                if decision is not None:
+                    self._trace_service.record(
+                        component="GuardService",
+                        event="PolicyMatched",
+                        metadata={
+                            "policy": policy_name,
+                            "tool": tool_name,
+                            "decision": decision.action.value,
+                        },
+                    )
+                    return self._finalize(tool_name, decision)
+
+            decision = GuardDecision(
+                action=GuardAction.ALLOW,
+                reason="Tool execution allowed.",
+                policy="default_policy",
+            )
+            return self._finalize(tool_name, decision)
+        except GuardEvaluationError:
+            raise
+        except OrionError:
+            raise
+        except Exception as exc:
+            self._trace_service.record(
+                component="GuardService",
+                event="GuardEvaluationFailed",
+                metadata={
+                    "tool": tool_name,
+                    "error_type": type(exc).__name__,
+                },
+            )
+            raise GuardEvaluationError(
+                "Guard evaluation failed",
+                tool_name=tool_name,
+            ) from exc
 
     def _finalize(
         self,

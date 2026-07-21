@@ -1,4 +1,4 @@
-"""Backward-compatible re-exports from shared config."""
+""" Backward-compatible re-exports from shared config."""
 
 from config import (  # noqa: F401
     APP_NAME,

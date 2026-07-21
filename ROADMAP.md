@@ -1,25 +1,25 @@
 # Orion Roadmap
 
-## Phase 0
-Foundation
+## Completed — v1.0
 
-## Phase 1
-Google ADK Fundamentals
+- Runtime (AgentRunner + ADK)
+- Memory (session + SQLite)
+- Guard (policy engine)
+- Observability (tracing + metrics)
+- Typed configuration
+- Error hierarchy
+- Developer CLI (run, doctor, config, guard, memory)
 
-## Phase 2
-Google Orcas
+## v1.1 / v2.0
 
-## Phase 3
-Agent Runtime
+- Persistent metrics / trace storage
+- CLI: `metrics`, `trace`, `session`
+- Agent / tool / plugin commands
+- `orion serve` API surface
+- Dashboard
 
-## Phase 4
-Memory
+## Later
 
-## Phase 5
-Multi-Agent Systems
-
-## Phase 6
-Production Platform
-
-## Phase 7
-Open Source
+- Multi-agent orchestration expansions
+- Plugin marketplace
+- Open-source release polish

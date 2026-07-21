@@ -15,6 +15,7 @@ from google.adk.runners import Runner
 from google.genai import types
 
 from config import APP_NAME
+from errors import OrionError, OrionRuntimeError
 from models.session_info import SessionInfo
 from observability.metrics.metrics_service import MetricsService
 from observability.trace_service import TraceService
@@ -106,6 +107,16 @@ class AgentRunner:
                 new_message=new_message,
             ):
                 yield event
+        except OrionError:
+            self._trace_service.record(
+                component="OrionRuntime",
+                event="RequestFailed",
+                metadata={
+                    "session_id": session.session_id,
+                    "error_type": "OrionError",
+                },
+            )
+            raise
         except Exception as exc:
             self._trace_service.record(
                 component="OrionRuntime",
@@ -115,7 +126,11 @@ class AgentRunner:
                     "error_type": type(exc).__name__,
                 },
             )
-            raise
+            raise OrionRuntimeError(
+                "Agent request failed",
+                operation="stream_message",
+                session_id=session.session_id,
+            ) from exc
 
     async def run_message(
         self,
@@ -147,10 +162,18 @@ class AgentRunner:
                     "has_final_text": bool(final_text),
                 },
             )
-        except Exception:
+        except OrionError:
             duration_ms = (time.perf_counter() - started) * 1000
             self._metrics_service.record_request_failed(duration_ms)
             raise
+        except Exception as exc:
+            duration_ms = (time.perf_counter() - started) * 1000
+            self._metrics_service.record_request_failed(duration_ms)
+            raise OrionRuntimeError(
+                "Agent request failed",
+                operation="run_message",
+                session_id=session.session_id,
+            ) from exc
 
         return {
             "events": events,
