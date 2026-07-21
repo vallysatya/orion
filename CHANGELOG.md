@@ -7,8 +7,15 @@ and this project aims to follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-07-21
+
+### Fixed
+
+- `after_tool_callback` no longer calls `.pop()` on ADK `State` (unsupported), which crashed live tool runs after successful execution
+
 ### Added
 
+- Reproducible demo scenarios under `examples/`
 - Comprehensive Markdown documentation set under `docs/`
 - Project governance docs: `SECURITY.md`, `SUPPORT.md`, `CODE_OF_CONDUCT.md`
 - Expanded `CONTRIBUTING.md`
@@ -54,6 +61,7 @@ deferred until durable / out-of-process surfaces exist.
 - Initialized Orion repository
 - Added project structure
 
-[Unreleased]: https://github.com/vallysatya/orion/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/vallysatya/orion/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/vallysatya/orion/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/vallysatya/orion/releases/tag/v1.0.0
 [0.0.1]: https://github.com/vallysatya/orion/releases/tag/v0.0.1

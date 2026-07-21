@@ -150,7 +150,10 @@ def after_tool_callback(
     metrics = container.metrics_service
     trace = container.trace_service
 
-    started = tool_context.state.pop(_TOOL_START_STATE_KEY, None)
+    # ADK State supports get/set but not pop/delete.
+    started = tool_context.state.get(_TOOL_START_STATE_KEY)
+    if _TOOL_START_STATE_KEY in tool_context.state:
+        tool_context.state[_TOOL_START_STATE_KEY] = None
     duration_ms = None
     if isinstance(started, (int, float)):
         duration_ms = (time.perf_counter() - float(started)) * 1000

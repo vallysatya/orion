@@ -35,6 +35,12 @@ and intentional limitations.
 | [Memory management](guides/memory-management.md) | Preferences, stats, and clearing |
 | [Troubleshooting](guides/troubleshooting.md) | Common failures and fixes |
 
+## Reproducible examples
+
+The [examples directory](../examples/README.md) contains presentation-ready
+walkthroughs for a live GitHub issue request, a safe tool call, PII blocking,
+prompt-injection blocking, and an approval-required decision.
+
 ## Reference
 
 | Page | Description |

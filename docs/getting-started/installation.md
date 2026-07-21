@@ -65,7 +65,7 @@ If you use this path for local hacking, you must set `PYTHONPATH=src` yourself.
 
 ```bash
 orion version
-# Orion 1.0.0
+# Orion 1.0.1
 
 orion help
 ```
@@ -79,8 +79,8 @@ python -m build
 
 Artifacts appear under `dist/`:
 
-- `orion-1.0.0-py3-none-any.whl`
-- `orion-1.0.0.tar.gz`
+- `orion-1.0.1-py3-none-any.whl`
+- `orion-1.0.1.tar.gz`
 
 Package discovery includes Orion modules under `src/` and excludes tests, `.env`
 files, databases, caches, and build artifacts. See `MANIFEST.in` and

@@ -6,7 +6,7 @@ Orion gives developers a production-minded agent runtime: typed configuration,
 policy-enforced tool execution, dual-layer memory, structured errors, and
 in-process observability — all accessible through a focused CLI.
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.1-blue.svg)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
@@ -142,6 +142,22 @@ See the full reference: [docs/reference/cli.md](docs/reference/cli.md)
 
 ---
 
+## Reproducible demos
+
+The [`examples/`](examples/README.md) directory turns Orion's core behaviors
+into walkthroughs you can run, inspect, and present:
+
+- [Read and summarize GitHub issues](examples/github_issue_demo.md)
+- [Allow a safe tool call](examples/safe_tool_demo.md)
+- [Block PII before execution](examples/blocked_pii_demo.md)
+- [Block prompt injection](examples/prompt_injection_demo.md)
+- [Classify a sensitive operation as approval-required](examples/approval_flow_demo.md)
+
+Each demo shows the request, internal Guard/Memory/Tool/Observability flow,
+expected output, and why the decision is correct.
+
+---
+
 ## Architecture
 
 ```text
@@ -184,6 +200,7 @@ orion version
 | Getting started | [Installation](docs/getting-started/installation.md) · [Quickstart](docs/getting-started/quickstart.md) · [Configuration](docs/getting-started/configuration.md) |
 | Concepts | [Architecture](docs/concepts/architecture.md) · [Guard](docs/concepts/guard-and-approvals.md) · [Memory](docs/concepts/memory-model.md) · [Observability](docs/concepts/observability.md) |
 | Guides | [GitHub assistant](docs/guides/github-assistant.md) · [Security guard](docs/guides/security-guard.md) · [Memory](docs/guides/memory-management.md) · [Troubleshooting](docs/guides/troubleshooting.md) |
+| Examples | [Reproducible demo scenarios](examples/README.md) |
 | Reference | [CLI](docs/reference/cli.md) · [Config](docs/reference/configuration.md) · [Metrics](docs/reference/metrics.md) · [Errors](docs/reference/errors.md) |
 | Development | [Extending](docs/development/extending-orion.md) · [Testing](docs/development/testing.md) · [Releases](docs/development/release-process.md) |
 

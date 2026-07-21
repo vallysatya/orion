@@ -50,7 +50,7 @@ Doctor does **not** call the live GitHub API.
 
 ```bash
 orion version
-# Orion 1.0.0
+# Orion 1.0.1
 ```
 
 ## `orion help`

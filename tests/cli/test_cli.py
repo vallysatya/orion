@@ -41,12 +41,12 @@ def _settings(
 
 def test_version_prints_public_version(capsys):
     assert run_version() == 0
-    assert capsys.readouterr().out.strip() == "Orion 1.0.0"
+    assert capsys.readouterr().out.strip() == "Orion 1.0.1"
 
 
 def test_main_dispatches_version(capsys):
     assert main(["version"]) == 0
-    assert capsys.readouterr().out.strip() == "Orion 1.0.0"
+    assert capsys.readouterr().out.strip() == "Orion 1.0.1"
 
 
 def test_main_dispatches_run_message(monkeypatch):

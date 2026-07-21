@@ -111,7 +111,7 @@ orion memory clear --yes
 
 | Check | Expected |
 | --- | --- |
-| `orion version` | `Orion 1.0.0` |
+| `orion version` | `Orion 1.0.1` |
 | `orion doctor` | green checks (or clear next steps) |
 | `orion guard test` | four scenarios pass |
 | `orion run "..."` | final agent text (or a typed Orion error) |
